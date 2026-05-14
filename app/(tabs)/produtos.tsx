@@ -1,147 +1,305 @@
-import { Feather } from '@expo/vector-icons';
-import React, { useMemo, useState } from 'react';
-import {
-  FlatList,
-  SafeAreaView,
-  ScrollView,
-  StyleSheet,
-  Text,
+import React, { useState, useMemo, useCallback } from 'react';
+import { 
+  View, 
+  Text, 
+  StyleSheet, 
+  FlatList, 
   TextInput,
   TouchableOpacity,
-  View
+  ScrollView
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
+import { theme } from '../../src/constants/theme';
+import { 
+  PRODUTOS_MOCK, 
+  CATEGORIAS_MOCK, 
+  Produto
+} from '../../src/data/mockData';
 
-// --- MOCK DATA ---
-const categories = ['Todos', 'Bebidas', 'Alimentos', 'Limpeza'];
-
-const allProducts = [
-  { id: '1', name: 'Café Especial 250g', quantity: '4 un', category: 'Bebidas', status: 'Baixo' },
-  { id: '2', name: 'Água Mineral 500ml', quantity: '48 un', category: 'Bebidas', status: 'Normal' },
-  { id: '3', name: 'Suco de Laranja', quantity: '6 un', category: 'Bebidas', status: 'Baixo' },
-  { id: '4', name: 'Arroz Branco 5kg', quantity: '15 cx', category: 'Alimentos', status: 'Normal' },
-  { id: '5', name: 'Feijão Carioca', quantity: '3 un', category: 'Alimentos', status: 'Baixo' },
-  { id: '6', name: 'Sabão em Pó', quantity: '0 cx', category: 'Limpeza', status: 'Sem estoque' },
-];
-
-const StatusBadge = ({ status }: { status: string }) => {
-  let bgColor, textColor;
-  switch (status) {
-    case 'Baixo': bgColor = '#FEF9C3'; textColor = '#D97706'; break;
-    case 'Normal': bgColor = '#ECFDF5'; textColor = '#059669'; break;
-    case 'Sem estoque': bgColor = '#FEF2F2'; textColor = '#DC2626'; break;
-    default: bgColor = '#F3F4F6'; textColor = '#374151';
-  }
-  return (
-    <View style={[styles.badge, { backgroundColor: bgColor }]}>
-      <Text style={[styles.badgeText, { color: textColor }]}>{status}</Text>
-    </View>
-  );
-};
-
-export default function Produtos() {
+export default function ProdutosScreen() {
   const [searchQuery, setSearchQuery] = useState('');
-  const [activeCategory, setActiveCategory] = useState('Todos');
+  const [selectedCategoria, setSelectedCategoria] = useState<string | null>(null);
 
-  // --- FILTRO OTIMIZADO COM useMemo ---
+  // Filter products using useMemo
   const filteredProducts = useMemo(() => {
-    return allProducts.filter(product => {
-      const matchesSearch = product.name.toLowerCase().includes(searchQuery.toLowerCase());
-      const matchesCategory = activeCategory === 'Todos' || product.category === activeCategory;
-      return matchesSearch && matchesCategory;
+    return PRODUTOS_MOCK.filter(produto => {
+      // Filter by category
+      if (selectedCategoria && produto.categoriaId !== selectedCategoria) {
+        return false;
+      }
+      // Filter by search text
+      if (searchQuery) {
+        const query = searchQuery.toLowerCase();
+        return produto.nome.toLowerCase().includes(query);
+      }
+      return true;
     });
-  }, [searchQuery, activeCategory]);
+  }, [searchQuery, selectedCategoria]);
+
+  // Toggle category filter
+  const handleToggleCategoria = useCallback((id: string) => {
+    setSelectedCategoria(prev => prev === id ? null : id);
+  }, []);
+
+  // Get category icon
+  const getCategoriaIcon = useCallback((categoriaId: string) => {
+    const cat = CATEGORIAS_MOCK.find(c => c.id === categoriaId);
+    return cat ? cat.icon : 'cube-outline';
+  }, []);
+
+  // Status Badge component
+  const StatusBadge = useCallback(({ status }: { status: Produto['statusEstoque'] }) => {
+    let bgColor, textColor, label;
+    switch (status) {
+      case 'normal':
+        bgColor = theme.colors.success.light;
+        textColor = theme.colors.success.dark;
+        label = 'Normal';
+        break;
+      case 'baixo':
+        bgColor = theme.colors.warning.light;
+        textColor = theme.colors.warning.dark;
+        label = 'Baixo';
+        break;
+      case 'sem_estoque':
+        bgColor = theme.colors.danger.light;
+        textColor = theme.colors.danger.dark;
+        label = 'Sem estoque';
+        break;
+    }
+
+    return (
+      <View style={[styles.badge, { backgroundColor: bgColor }]}>
+        <Text style={[styles.badgeText, { color: textColor }]}>{label}</Text>
+      </View>
+    );
+  }, []);
+
+  const renderItem = useCallback(({ item }: { item: Produto }) => (
+    <View style={styles.productCard}>
+      <View style={styles.productIconContainer}>
+        <Ionicons name={getCategoriaIcon(item.categoriaId)} size={24} color={theme.colors.primary[500]} />
+      </View>
+      <View style={styles.productInfo}>
+        <Text style={styles.productName} numberOfLines={1}>{item.nome}</Text>
+        <Text style={styles.productQty}>{item.quantidade} {item.unidade}</Text>
+      </View>
+      <StatusBadge status={item.statusEstoque} />
+    </View>
+  ), [getCategoriaIcon, StatusBadge]);
+
+  const renderEmptyComponent = useCallback(() => (
+    <View style={styles.emptyContainer}>
+      <Ionicons name="search-outline" size={48} color={theme.colors.neutral[300]} />
+      <Text style={styles.emptyText}>Nenhum produto encontrado</Text>
+      <Text style={styles.emptySubtext}>Tente buscar por outro termo ou remova os filtros.</Text>
+    </View>
+  ), []);
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <View style={styles.header}>
-        <View style={styles.topRow}>
+      <View style={styles.container}>
+        
+        <View style={styles.header}>
           <Text style={styles.title}>Produtos</Text>
-          <TouchableOpacity style={styles.fab}>
-            <Feather name="plus" size={24} color="#FFF" />
-          </TouchableOpacity>
         </View>
 
-        {/* Campo de busca com TextInput */}
         <View style={styles.searchContainer}>
-          <Feather name="search" size={20} color="#9CA3AF" style={styles.searchIcon} />
+          <Ionicons name="search" size={20} color={theme.colors.neutral[400]} style={styles.searchIcon} />
           <TextInput
             style={styles.searchInput}
-            placeholder="Buscar produto..."
+            placeholder="Buscar produtos..."
+            placeholderTextColor={theme.colors.neutral[400]}
             value={searchQuery}
             onChangeText={setSearchQuery}
-            placeholderTextColor="#9CA3AF"
+            autoCapitalize="none"
+            autoCorrect={false}
           />
+          {searchQuery.length > 0 && (
+            <TouchableOpacity onPress={() => setSearchQuery('')} style={styles.clearButton}>
+              <Ionicons name="close-circle" size={20} color={theme.colors.neutral[400]} />
+            </TouchableOpacity>
+          )}
         </View>
 
-        {/* Chips de categoria (.map) */}
-        <View>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipsContainer}>
-            {categories.map((cat, index) => (
-              <TouchableOpacity 
-                key={index} 
-                style={[styles.chip, activeCategory === cat && styles.chipActive]}
-                onPress={() => setActiveCategory(cat)}
-              >
-                <Text style={[styles.chipText, activeCategory === cat && styles.chipTextActive]}>
-                  {cat}
-                </Text>
-              </TouchableOpacity>
-            ))}
+        <View style={styles.filtersContainer}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filtersScrollContent}>
+            {CATEGORIAS_MOCK.map(categoria => {
+              const isSelected = selectedCategoria === categoria.id;
+              return (
+                <TouchableOpacity
+                  key={categoria.id}
+                  style={[styles.chip, isSelected && styles.chipSelected]}
+                  onPress={() => handleToggleCategoria(categoria.id)}
+                >
+                  <Ionicons 
+                    name={categoria.icon} 
+                    size={16} 
+                    color={isSelected ? theme.colors.white : theme.colors.neutral[600]} 
+                    style={styles.chipIcon}
+                  />
+                  <Text style={[styles.chipText, isSelected && styles.chipTextSelected]}>
+                    {categoria.nome}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
           </ScrollView>
         </View>
-      </View>
 
-      {/* FlatList com useMemo */}
-      <FlatList
-        data={filteredProducts}
-        keyExtractor={(item) => item.id}
-        contentContainerStyle={styles.listContent}
-        showsVerticalScrollIndicator={false}
-        ListEmptyComponent={
-          <View style={styles.emptyContainer}>
-            <Feather name="inbox" size={48} color="#D1D5DB" />
-            <Text style={styles.emptyText}>Nenhum produto encontrado.</Text>
-          </View>
-        }
-        renderItem={({ item }) => (
-          <View style={styles.productItem}>
-            <View style={styles.productIconBg}>
-              <Feather name="package" size={20} color="#CDA484" /> 
-            </View>
-            <View style={styles.productInfo}>
-              <Text style={styles.productName}>{item.name}</Text>
-              <Text style={styles.productQuantity}>{item.quantity}</Text>
-            </View>
-            <StatusBadge status={item.status} />
-          </View>
-        )}
-      />
+        <FlatList
+          data={filteredProducts}
+          keyExtractor={(item) => item.id}
+          renderItem={renderItem}
+          ListEmptyComponent={renderEmptyComponent}
+          contentContainerStyle={styles.listContent}
+          showsVerticalScrollIndicator={false}
+        />
+
+      </View>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: '#FFF' },
-  header: { padding: 20, paddingBottom: 10 },
-  topRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
-  title: { fontSize: 24, fontWeight: 'bold', color: '#1F2937' },
-  fab: { backgroundColor: '#8B5CF6', width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center' },
-  searchContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F3F4F6', borderRadius: 12, paddingHorizontal: 12, height: 48, marginBottom: 16 },
-  searchIcon: { marginRight: 8 },
-  searchInput: { flex: 1, fontSize: 16, color: '#1F2937' },
-  chipsContainer: { gap: 10, paddingRight: 20 },
-  chip: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, backgroundColor: '#F3F4F6' },
-  chipActive: { backgroundColor: '#8B5CF6' },
-  chipText: { fontSize: 14, color: '#6B7280', fontWeight: '500' },
-  chipTextActive: { color: '#FFF' },
-  listContent: { padding: 20, paddingTop: 10 },
-  productItem: { flexDirection: 'row', alignItems: 'center', marginBottom: 20 },
-  productIconBg: { width: 40, height: 40, backgroundColor: '#F3F4F6', borderRadius: 8, justifyContent: 'center', alignItems: 'center', marginRight: 12 },
-  productInfo: { flex: 1 },
-  productName: { fontSize: 15, fontWeight: '600', color: '#1F2937' },
-  productQuantity: { fontSize: 13, color: '#6B7280' },
-  badge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 },
-  badgeText: { fontSize: 12, fontWeight: 'bold' },
-  emptyContainer: { alignItems: 'center', marginTop: 50 },
-  emptyText: { marginTop: 10, color: '#9CA3AF', fontSize: 16 }
+  safeArea: {
+    flex: 1,
+    backgroundColor: theme.colors.background,
+  },
+  container: {
+    flex: 1,
+  },
+  header: {
+    paddingHorizontal: theme.spacing[4],
+    paddingTop: theme.spacing[4],
+    paddingBottom: theme.spacing[2],
+  },
+  title: {
+    fontSize: theme.typography.fontSize['3xl'],
+    fontWeight: theme.typography.fontWeight.bold,
+    color: theme.colors.neutral[900],
+  },
+  searchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: theme.colors.white,
+    marginHorizontal: theme.spacing[4],
+    marginBottom: theme.spacing[4],
+    borderRadius: theme.borderRadius.lg,
+    borderWidth: 1,
+    borderColor: theme.colors.neutral[200],
+    paddingHorizontal: theme.spacing[3],
+    height: 48,
+  },
+  searchIcon: {
+    marginRight: theme.spacing[2],
+  },
+  searchInput: {
+    flex: 1,
+    height: '100%',
+    fontSize: theme.typography.fontSize.md,
+    color: theme.colors.neutral[900],
+  },
+  clearButton: {
+    padding: theme.spacing[1],
+  },
+  filtersContainer: {
+    marginBottom: theme.spacing[4],
+  },
+  filtersScrollContent: {
+    paddingHorizontal: theme.spacing[4],
+    gap: theme.spacing[2],
+  },
+  chip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: theme.colors.white,
+    paddingHorizontal: theme.spacing[3],
+    paddingVertical: theme.spacing[2],
+    borderRadius: theme.borderRadius.full,
+    borderWidth: 1,
+    borderColor: theme.colors.neutral[200],
+  },
+  chipSelected: {
+    backgroundColor: theme.colors.primary[500],
+    borderColor: theme.colors.primary[500],
+  },
+  chipIcon: {
+    marginRight: theme.spacing[1],
+  },
+  chipText: {
+    fontSize: theme.typography.fontSize.sm,
+    fontWeight: theme.typography.fontWeight.medium,
+    color: theme.colors.neutral[600],
+  },
+  chipTextSelected: {
+    color: theme.colors.white,
+  },
+  listContent: {
+    paddingHorizontal: theme.spacing[4],
+    paddingBottom: theme.spacing[8],
+    flexGrow: 1,
+  },
+  emptyContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: theme.spacing[16],
+  },
+  emptyText: {
+    marginTop: theme.spacing[4],
+    fontSize: theme.typography.fontSize.lg,
+    fontWeight: theme.typography.fontWeight.semibold,
+    color: theme.colors.neutral[700],
+  },
+  emptySubtext: {
+    marginTop: theme.spacing[2],
+    fontSize: theme.typography.fontSize.sm,
+    color: theme.colors.neutral[500],
+    textAlign: 'center',
+  },
+  // Reusing product card styles from Dashboard
+  productCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: theme.colors.white,
+    padding: theme.spacing[4],
+    borderRadius: theme.borderRadius.lg,
+    marginBottom: theme.spacing[3],
+    borderWidth: 1,
+    borderColor: theme.colors.neutral[200],
+  },
+  productIconContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: theme.borderRadius.md,
+    backgroundColor: theme.colors.primary[100],
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: theme.spacing[3],
+  },
+  productInfo: {
+    flex: 1,
+  },
+  productName: {
+    fontSize: theme.typography.fontSize.md,
+    fontWeight: theme.typography.fontWeight.semibold,
+    color: theme.colors.neutral[900],
+    marginBottom: 2,
+  },
+  productQty: {
+    fontSize: theme.typography.fontSize.sm,
+    color: theme.colors.neutral[500],
+  },
+  badge: {
+    paddingHorizontal: theme.spacing[2],
+    paddingVertical: theme.spacing[1],
+    borderRadius: theme.borderRadius.full,
+  },
+  badgeText: {
+    fontSize: 10,
+    fontWeight: theme.typography.fontWeight.bold,
+    textTransform: 'uppercase',
+  },
 });

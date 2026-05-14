@@ -1,156 +1,369 @@
-import { Feather } from '@expo/vector-icons';
-import React, { useState } from 'react';
-import {
-  FlatList,
-  RefreshControl,
-  SafeAreaView, StatusBar,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View
+import React, { useState, useCallback, useMemo } from 'react';
+import { 
+  View, 
+  Text, 
+  StyleSheet, 
+  FlatList, 
+  RefreshControl, 
+  TouchableOpacity 
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
+import { theme } from '../../src/constants/theme';
+import { 
+  PRODUTOS_MOCK, 
+  CATEGORIAS_MOCK, 
+  getProdutosComEstoqueBaixo, 
+  getValorTotalEstoque, 
+  formatarPreco,
+  Produto
+} from '../../src/data/mockData';
+import { useRouter } from 'expo-router';
+import { useAuth } from '../../src/contexts/AuthContext';
 
-// --- MOCK DATA ---
-const summaryData = [
-  { id: '1', title: 'Produtos', value: '10', icon: 'package', color: '#F3F4F6', iconColor: '#8B5CF6' },
-  { id: '2', title: 'Alertas', value: '5', icon: 'alert-triangle', color: '#FEF2F2', iconColor: '#EF4444' },
-  { id: '3', title: 'Categorias', value: '5', icon: 'grid', color: '#FEF9C3', iconColor: '#EAB308' },
-  { id: '4', title: 'Em Estoque', value: 'R$ 856', icon: 'dollar-sign', color: '#ECFDF5', iconColor: '#10B981' },
-];
-
-const criticalAlerts = [
-  { id: '1', name: 'Café Especial 250g', amount: '4/10' },
-  { id: '2', name: 'Caneta Esferográfica', amount: '1/20' },
-  { id: '3', name: 'Sabão em Pó 3kg', amount: '0/4' },
-];
-
-const recentProducts = [
-  { id: '1', name: 'Café Especial', quantity: '4 un', status: 'Baixo' },
-  { id: '2', name: 'Água Mineral', quantity: '48 un', status: 'Normal' },
-  { id: '3', name: 'Arroz Branco', quantity: '15 cx', status: 'Normal' },
-  { id: '4', name: 'Sabão em Pó', quantity: '0 cx', status: 'Sem estoque' },
-];
-
-// --- COMPONENTES AUXILIARES ---
-const StatusBadge = ({ status }: { status: string }) => {
-  let bgColor, textColor;
-  switch (status) {
-    case 'Baixo': bgColor = '#FEF9C3'; textColor = '#D97706'; break;
-    case 'Normal': bgColor = '#ECFDF5'; textColor = '#059669'; break;
-    case 'Sem estoque': bgColor = '#FEF2F2'; textColor = '#DC2626'; break;
-    default: bgColor = '#F3F4F6'; textColor = '#374151';
-  }
-  return (
-    <View style={[styles.badge, { backgroundColor: bgColor }]}>
-      <Text style={[styles.badgeText, { color: textColor }]}>{status}</Text>
-    </View>
-  );
-};
-
-export default function Home() {
+export default function HomeScreen() {
+  const router = useRouter();
+  const { user } = useAuth();
   const [refreshing, setRefreshing] = useState(false);
 
-  const onRefresh = () => {
-    setRefreshing(true);
-    setTimeout(() => setRefreshing(false), 1500);
+  // Saudação baseada no horário
+  const getGreeting = () => {
+    const hour = new Date().getHours();
+    if (hour < 12) return 'Bom dia';
+    if (hour < 18) return 'Boa tarde';
+    return 'Boa noite';
   };
 
-  // --- HEADER DA FLATLIST ---
-  const ListHeader = () => (
+  // Simulating refresh
+  const onRefresh = useCallback(() => {
+    setRefreshing(true);
+    setTimeout(() => setRefreshing(false), 1500);
+  }, []);
+
+  // Calculate summaries
+  const totalProdutos = PRODUTOS_MOCK.length;
+  const produtosBaixoEstoque = getProdutosComEstoqueBaixo();
+  const totalCategorias = CATEGORIAS_MOCK.length;
+  const valorTotal = getValorTotalEstoque();
+
+  // Get category icon
+  const getCategoriaIcon = (categoriaId: string) => {
+    const cat = CATEGORIAS_MOCK.find(c => c.id === categoriaId);
+    return cat ? cat.icon : 'cube-outline';
+  };
+
+  // Status Badge components
+  const StatusBadge = ({ status }: { status: Produto['statusEstoque'] }) => {
+    let bgColor, textColor, label;
+    switch (status) {
+      case 'normal':
+        bgColor = theme.colors.success.light;
+        textColor = theme.colors.success.dark;
+        label = 'Normal';
+        break;
+      case 'baixo':
+        bgColor = theme.colors.warning.light;
+        textColor = theme.colors.warning.dark;
+        label = 'Baixo';
+        break;
+      case 'sem_estoque':
+        bgColor = theme.colors.danger.light;
+        textColor = theme.colors.danger.dark;
+        label = 'Sem estoque';
+        break;
+    }
+
+    return (
+      <View style={[styles.badge, { backgroundColor: bgColor }]}>
+        <Text style={[styles.badgeText, { color: textColor }]}>{label}</Text>
+      </View>
+    );
+  };
+
+  const renderHeader = () => (
     <View style={styles.headerContainer}>
-      {/* Saudação e FAB */}
-      <View style={styles.topRow}>
-        <View>
-          <Text style={styles.greeting}>Olá, João 👋</Text>
-          <Text style={styles.subtitle}>Visão geral do estoque</Text>
+      <View style={styles.greetingHeader}>
+        <View style={styles.headerRow}>
+          <View>
+            <Text style={styles.greeting}>{getGreeting()}, {user?.nome || 'Usuário'} 👋</Text>
+            <Text style={styles.subtitle}>Visão geral do seu estoque</Text>
+          </View>
+          <View style={styles.avatar}>
+            <Text style={styles.avatarText}>{user?.nome?.charAt(0).toUpperCase() || 'U'}</Text>
+          </View>
         </View>
-        <TouchableOpacity style={styles.fab}>
-          <Feather name="plus" size={24} color="#FFF" />
-        </TouchableOpacity>
       </View>
 
-      {/* 4 Cards de resumo com .map() */}
-      <View style={styles.grid}>
-        {summaryData.map((item) => (
-          <View key={item.id} style={[styles.card, { backgroundColor: item.color }]}>
-            <Feather name={item.icon as any} size={20} color={item.iconColor} style={{ marginBottom: 8 }} />
-            <Text style={styles.cardValue}>{item.value}</Text>
-            <Text style={styles.cardTitle}>{item.title}</Text>
+      <View style={styles.summaryGrid}>
+        <View style={styles.summaryCard}>
+          <Text style={styles.summaryCardValue}>{totalProdutos}</Text>
+          <Text style={styles.summaryCardLabel}>Produtos</Text>
+        </View>
+        <View style={[styles.summaryCard, styles.summaryCardWarning]}>
+          <Text style={styles.summaryCardValueWarning}>{produtosBaixoEstoque.length}</Text>
+          <Text style={styles.summaryCardLabelWarning}>Alertas</Text>
+        </View>
+        <View style={styles.summaryCard}>
+          <Text style={styles.summaryCardValue}>{totalCategorias}</Text>
+          <Text style={styles.summaryCardLabel}>Categorias</Text>
+        </View>
+        <View style={[styles.summaryCard, styles.summaryCardSuccess]}>
+          <Text style={styles.summaryCardValueSuccess}>{formatarPreco(valorTotal)}</Text>
+          <Text style={styles.summaryCardLabelSuccess}>Valor</Text>
+        </View>
+      </View>
+
+      {produtosBaixoEstoque.length > 0 && (
+        <View style={styles.alertsSection}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>⚠️ Alertas de Estoque</Text>
+            {produtosBaixoEstoque.length > 3 && (
+              <TouchableOpacity onPress={() => router.push('/(tabs)/produtos')}>
+                <Text style={styles.seeAllText}>Ver todos</Text>
+              </TouchableOpacity>
+            )}
           </View>
-        ))}
-      </View>
+          {produtosBaixoEstoque.slice(0, 3).map(produto => (
+            <View key={`alert-${produto.id}`} style={styles.alertItem}>
+              <View style={styles.alertItemLeft}>
+                <Ionicons name="warning-outline" size={20} color={theme.colors.danger.base} />
+                <Text style={styles.alertItemName} numberOfLines={1}>{produto.nome}</Text>
+              </View>
+              <Text style={styles.alertItemQtd}>
+                {produto.quantidade} {produto.unidade}
+              </Text>
+            </View>
+          ))}
+        </View>
+      )}
 
-      {/* Alerta de estoque crítico */}
-      <View style={styles.alertBox}>
-        <Text style={styles.alertBoxTitle}>⚠️ Estoque crítico (5)</Text>
-        {criticalAlerts.map(alert => (
-          <View key={alert.id} style={styles.alertItemRow}>
-            <Text style={styles.alertItemName}>{alert.name}</Text>
-            <Text style={styles.alertItemValue}>{alert.amount}</Text>
-          </View>
-        ))}
-        <TouchableOpacity>
-          <Text style={styles.alertLink}>Ver todos →</Text>
-        </TouchableOpacity>
-      </View>
-
-      <Text style={styles.sectionTitle}>Produtos recentes</Text>
+      <Text style={[styles.sectionTitle, styles.recentProductsTitle]}>Produtos recentes</Text>
     </View>
   );
+
+  const renderItem = useCallback(({ item }: { item: Produto }) => (
+    <View style={styles.productCard}>
+      <View style={styles.productIconContainer}>
+        <Ionicons name={getCategoriaIcon(item.categoriaId)} size={24} color={theme.colors.primary[500]} />
+      </View>
+      <View style={styles.productInfo}>
+        <Text style={styles.productName} numberOfLines={1}>{item.nome}</Text>
+        <Text style={styles.productQty}>{item.quantidade} {item.unidade}</Text>
+      </View>
+      <StatusBadge status={item.statusEstoque} />
+    </View>
+  ), []);
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <StatusBar barStyle="dark-content" backgroundColor="#FFF" />
       <FlatList
-        data={recentProducts}
+        data={PRODUTOS_MOCK}
         keyExtractor={(item) => item.id}
-        ListHeaderComponent={ListHeader}
-        showsVerticalScrollIndicator={false}
+        renderItem={renderItem}
+        ListHeaderComponent={renderHeader}
         contentContainerStyle={styles.listContent}
+        showsVerticalScrollIndicator={false}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#8B5CF6']} />
+          <RefreshControl 
+            refreshing={refreshing} 
+            onRefresh={onRefresh} 
+            colors={[theme.colors.primary[500]]} 
+            tintColor={theme.colors.primary[500]}
+          />
         }
-        renderItem={({ item }) => (
-          <View style={styles.productItem}>
-            <View style={styles.productIconBg}>
-              <Feather name="package" size={20} color="#8B5CF6" />
-            </View>
-            <View style={styles.productInfo}>
-              <Text style={styles.productName}>{item.name}</Text>
-              <Text style={styles.productQuantity}>{item.quantity}</Text>
-            </View>
-            <StatusBadge status={item.status} />
-          </View>
-        )}
       />
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: '#FFF' },
-  listContent: { padding: 20 },
-  headerContainer: { marginBottom: 10 },
-  topRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
-  greeting: { fontSize: 24, fontWeight: 'bold', color: '#1F2937' },
-  subtitle: { fontSize: 14, color: '#6B7280' },
-  fab: { backgroundColor: '#8B5CF6', width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center' },
-  grid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', marginBottom: 20 },
-  card: { width: '48%', padding: 16, borderRadius: 16, marginBottom: 15 },
-  cardValue: { fontSize: 20, fontWeight: 'bold', color: '#1F2937' },
-  cardTitle: { fontSize: 12, color: '#6B7280' },
-  alertBox: { backgroundColor: '#FFF1F2', padding: 16, borderRadius: 16, marginBottom: 24 },
-  alertBoxTitle: { fontSize: 16, fontWeight: 'bold', color: '#BE123C', marginBottom: 12 },
-  alertItemRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 },
-  alertItemName: { fontSize: 14, color: '#4C1D95' },
-  alertItemValue: { fontSize: 14, fontWeight: 'bold', color: '#E11D48' },
-  alertLink: { textAlign: 'right', color: '#8B5CF6', fontWeight: 'bold', marginTop: 8 },
-  sectionTitle: { fontSize: 18, fontWeight: 'bold', color: '#1F2937', marginBottom: 16 },
-  productItem: { flexDirection: 'row', alignItems: 'center', marginBottom: 16 },
-  productIconBg: { width: 40, height: 40, backgroundColor: '#F3F4F6', borderRadius: 8, justifyContent: 'center', alignItems: 'center', marginRight: 12 },
-  productInfo: { flex: 1 },
-  productName: { fontSize: 15, fontWeight: '600', color: '#1F2937' },
-  productQuantity: { fontSize: 13, color: '#6B7280' },
-  badge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 },
-  badgeText: { fontSize: 12, fontWeight: 'bold' }
+  safeArea: {
+    flex: 1,
+    backgroundColor: theme.colors.background,
+  },
+  listContent: {
+    padding: theme.spacing[4],
+    paddingBottom: theme.spacing[8],
+  },
+  headerContainer: {
+    marginBottom: theme.spacing[4],
+  },
+  greetingHeader: {
+    marginBottom: theme.spacing[6],
+    marginTop: theme.spacing[2],
+  },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  avatar: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: theme.colors.primary[100],
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  avatarText: {
+    fontSize: theme.typography.fontSize.xl,
+    fontWeight: theme.typography.fontWeight.bold,
+    color: theme.colors.primary[500],
+  },
+  greeting: {
+    fontSize: theme.typography.fontSize['2xl'],
+    fontWeight: theme.typography.fontWeight.bold,
+    color: theme.colors.neutral[900],
+    marginBottom: theme.spacing[1],
+  },
+  subtitle: {
+    fontSize: theme.typography.fontSize.sm,
+    color: theme.colors.neutral[500],
+  },
+  summaryGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    marginBottom: theme.spacing[6],
+  },
+  summaryCard: {
+    width: '48%',
+    backgroundColor: theme.colors.white,
+    borderRadius: theme.borderRadius.lg,
+    padding: theme.spacing[4],
+    marginBottom: theme.spacing[4],
+    borderWidth: 1,
+    borderColor: theme.colors.neutral[200],
+  },
+  summaryCardWarning: {
+    backgroundColor: theme.colors.warning.light,
+    borderColor: theme.colors.warning.light,
+  },
+  summaryCardSuccess: {
+    backgroundColor: theme.colors.success.light,
+    borderColor: theme.colors.success.light,
+  },
+  summaryCardLabel: {
+    color: theme.colors.neutral[500],
+    fontSize: theme.typography.fontSize.sm,
+  },
+  summaryCardLabelWarning: {
+    color: theme.colors.warning.dark,
+    fontSize: theme.typography.fontSize.sm,
+  },
+  summaryCardLabelSuccess: {
+    color: theme.colors.success.dark,
+    fontSize: theme.typography.fontSize.sm,
+  },
+  summaryCardValue: {
+    color: theme.colors.neutral[900],
+    fontSize: theme.typography.fontSize['3xl'],
+    fontWeight: theme.typography.fontWeight.bold,
+    marginBottom: theme.spacing[1],
+  },
+  summaryCardValueWarning: {
+    color: theme.colors.warning.dark,
+    fontSize: theme.typography.fontSize['3xl'],
+    fontWeight: theme.typography.fontWeight.bold,
+    marginBottom: theme.spacing[1],
+  },
+  summaryCardValueSuccess: {
+    color: theme.colors.success.dark,
+    fontSize: theme.typography.fontSize['3xl'],
+    fontWeight: theme.typography.fontWeight.bold,
+    marginBottom: theme.spacing[1],
+  },
+  alertsSection: {
+    backgroundColor: theme.colors.danger.light,
+    borderRadius: theme.borderRadius.lg,
+    padding: theme.spacing[4],
+    marginBottom: theme.spacing[6],
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: theme.spacing[4],
+  },
+  sectionTitle: {
+    fontSize: theme.typography.fontSize.lg,
+    fontWeight: theme.typography.fontWeight.bold,
+    color: theme.colors.neutral[900],
+  },
+  seeAllText: {
+    color: theme.colors.primary[500],
+    fontWeight: theme.typography.fontWeight.medium,
+    fontSize: theme.typography.fontSize.sm,
+  },
+  alertItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: theme.colors.white,
+    padding: theme.spacing[3],
+    borderRadius: theme.borderRadius.md,
+    marginBottom: theme.spacing[2],
+  },
+  alertItemLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  alertItemName: {
+    marginLeft: theme.spacing[2],
+    fontSize: theme.typography.fontSize.sm,
+    fontWeight: theme.typography.fontWeight.medium,
+    color: theme.colors.neutral[800],
+    flex: 1,
+  },
+  alertItemQtd: {
+    fontSize: theme.typography.fontSize.sm,
+    fontWeight: theme.typography.fontWeight.bold,
+    color: theme.colors.danger.base,
+  },
+  recentProductsTitle: {
+    marginBottom: theme.spacing[4],
+  },
+  productCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: theme.colors.white,
+    padding: theme.spacing[4],
+    borderRadius: theme.borderRadius.lg,
+    marginBottom: theme.spacing[3],
+    borderWidth: 1,
+    borderColor: theme.colors.neutral[200],
+  },
+  productIconContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: theme.borderRadius.md,
+    backgroundColor: theme.colors.primary[100],
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: theme.spacing[3],
+  },
+  productInfo: {
+    flex: 1,
+  },
+  productName: {
+    fontSize: theme.typography.fontSize.md,
+    fontWeight: theme.typography.fontWeight.semibold,
+    color: theme.colors.neutral[900],
+    marginBottom: 2,
+  },
+  productQty: {
+    fontSize: theme.typography.fontSize.sm,
+    color: theme.colors.neutral[500],
+  },
+  badge: {
+    paddingHorizontal: theme.spacing[2],
+    paddingVertical: theme.spacing[1],
+    borderRadius: theme.borderRadius.full,
+  },
+  badgeText: {
+    fontSize: 10,
+    fontWeight: theme.typography.fontWeight.bold,
+    textTransform: 'uppercase',
+  },
 });
